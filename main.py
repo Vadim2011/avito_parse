@@ -18,6 +18,7 @@
 
 
 import requests
+import urllib.parse
 from bs4 import BeautifulSoup as bs
 import datetime
 # from collections import Counter
@@ -71,8 +72,8 @@ class AvitoParser:
         pass
 
     @staticmethod
-    def parse_date(items: str):
-        params = items.strip().split(' ')
+    def parse_date(item: str):
+        params = item.strip().split(' ')
         if len(params) == 2:
             day, time = params
             if day == 'Сегодня':
@@ -80,10 +81,28 @@ class AvitoParser:
             elif day == 'Вчера':
                 date = datetime.date.today() - datetime.timedelta(days=1)
             else:
-                print('Несмогли разобрать день: ', items)
+                print('Несмогли разобрать день: ', item)
                 return ''
             time = datetime.datetime.strptime(time, '%H:%M').time()
             return datetime.datetime.combine(date=date, time=time)
+        elif len(params) == 3:
+            day, month_hru, time = params
+            day = int(day)
+            list_month = ['января', 'февраля', 'марта', 'апреля',
+                          'мая', 'июня', 'июля', 'августа',
+                          'сентября', 'октября', 'ноября', 'декабря']
+            month_map = {i: j for i, j in zip(list_month, range(1, 13))}
+
+            month = month_map.get(month_hru)
+            if not month:
+                print('не смогли разобрать месяы: ', item)
+                return
+            today = datetime.datetime.today()
+            time = datetime.datetime.strptime(time, '%H:%M')
+            return datetime.datetime(day=day, month=month, year=today.year, hour=time.hour, minute=time.minute)
+        else:
+            print('not remember date format')
+            return
 
         pass
 
@@ -112,7 +131,7 @@ class AvitoParser:
         date_block = item.select_one('div.date-text-2jSvU.text-text-1PdBw.text-size-s-1PUdo.text-color-noaccent-bzEdI')
         absolute_date = date_block.get('date-absolute-date')
         if absolute_date:
-            date = self.parse_date(items=absolute_date)
+            date = self.parse_date(item=absolute_date)
 
         return Block(
             url=url,
@@ -123,19 +142,39 @@ class AvitoParser:
         )
         pass
 
-    def get_blocks(self):
-        text = self.get_page()  # page=2
+    def get_pagination_number(self):
+        text = self.get_page()
+        soup = bs(text, 'lxml')
+        container = soup.select('a.pagination-page')
+        last_button = container[-1]
+        href = last_button.get('href')
+        if not href:
+            return 1
+
+        r = urllib.parse.urlparse(href)
+        r = urllib.parse.parse_qs(r.query)
+        return int(r['p'][0])
+        pass
+
+    def get_blocks(self, page: int = None):
+        text = self.get_page(page=page)  # page=2
         soup = bs(text, 'lxml')
         container = soup.select('div.iva-item-root-G3n7v.photo-slider-slider-3tEix.'
                                 'iva-item-list-2_PpT.iva-item-redesign-1OBTh.items-item-1Hoqq.'
                                 'items-listItem-11orH.js-catalog-item-enum')
         print(len(container))
         for item in container:
-            print(item)
-            return
             block = self.parse_block(item=item)
-            print(block)
         pass
+
+    def parse_all(self):
+        limit = self.get_pagination_number()
+        for i in range(1, limit + 1):
+            self.get_blocks(page=1)
+        pass
+
+
+
 
 
 def main():
