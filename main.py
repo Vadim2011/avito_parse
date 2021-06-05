@@ -16,6 +16,7 @@
 # ---------------------------------------------
 # 'https://www.avito.ru/irkutsk/nedvizhimost?q=%D0%BC%D0%B8%D0%BA%D1%80%D0%BE%D1%80%D0%B0%D0%B9%D0%BE%D0%BD+%D0%97%D0%B5%D0%BB%D1%91%D0%BD%D1%8B%D0%B9'
 
+
 import requests
 from bs4 import BeautifulSoup as bs
 import datetime
@@ -49,15 +50,24 @@ class AvitoParser:
         }
 
     def get_page(self, page: int = None):
+        """
+        get start page with all query ads
+        :param page:
+        :return:
+        """
         params = {
-            'radius': 0,
-            'user': 1
+            # 'radius': 0,
+            # 'user': 1
+            'q': 'мкрн+зеленый'
         }
         if page and page > 1:
             params['p'] = page
 
+        # https://www.avito.ru/irkutsk?q=мкрн+зеленый
         url = r'https://www.avito.ru/irkutsk/'
         r = self.session.get(url, params=params)
+        print(r.status_code)
+        return r.text
         pass
 
     @staticmethod
@@ -77,20 +87,60 @@ class AvitoParser:
 
         pass
 
-    def parse_block(self, item: str = None):
+    def parse_block(self, item):
+        url_block = item.get('a', {'data-marker': "item-title"})  # !!!!!!!!!!!!
+        print(url_block)
+        href = url_block.get('href')
+        if href:
+            url = r'https://www.avito.ru/irkutsk/' + href
+        else:
+            url = None
+
+        title_block = item.select_one('h3', {'itemprop': "name"})
+        title = title_block.string.strip()
+
+        price_block = item.select_one('span.price-text-1HrJ_.text-text-1PdBw.text-size-s-1PUdo')
+        price_block = price_block.get_text('\n')
+        price_block = list(filter(None, map(lambda i: i.strip(), price_block.split('\n'))))
+        if len(price_block) == 2:
+            price, currency = price_block
+        else:
+            price, currency = None, None
+            print('что-то пошло не так при поиске цены', price_block)
+
+        date = None
+        date_block = item.select_one('div.date-text-2jSvU.text-text-1PdBw.text-size-s-1PUdo.text-color-noaccent-bzEdI')
+        absolute_date = date_block.get('date-absolute-date')
+        if absolute_date:
+            date = self.parse_date(items=absolute_date)
+
+        return Block(
+            url=url,
+            title=title,
+            price=price,
+            currency=currency,
+            date=date
+        )
         pass
 
     def get_blocks(self):
-        text = self.get_page(page=2)
+        text = self.get_page()  # page=2
         soup = bs(text, 'lxml')
-        container = soup.select('div')
+        container = soup.select('div.iva-item-root-G3n7v.photo-slider-slider-3tEix.'
+                                'iva-item-list-2_PpT.iva-item-redesign-1OBTh.items-item-1Hoqq.'
+                                'items-listItem-11orH.js-catalog-item-enum')
+        print(len(container))
         for item in container:
+            print(item)
+            return
             block = self.parse_block(item=item)
             print(block)
         pass
 
+
 def main():
     p = AvitoParser()
+    # p.get_page()
     p.get_blocks()
 
 
